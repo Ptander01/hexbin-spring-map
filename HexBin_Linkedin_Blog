@@ -1,0 +1,200 @@
+# How I Built a 3D Hexbin Map with Spring Physics Animation 🗺️✨
+
+*A step-by-step guide to creating interactive, data-driven 3D visualizations with MapLibre GL JS*
+
+---
+
+Ever seen those stunning 3D city skyline maps and wondered how they're built? I recently went down a rabbit hole creating an interactive hexagonal binning visualization with **bouncy spring physics** — and I want to show you exactly how to build one yourself.
+
+The result: a map where data columns spring up from the ground in a wave, then bounce responsively under your cursor. All in a single HTML file with zero dependencies.
+
+Here's how each piece works. 👇
+
+---
+
+## 1. The Hexagonal Grid
+
+Hexagons tile more efficiently than squares and avoid the visual artifacts of rectangular grids. Each data point gets binned into the nearest hex cell:
+
+```javascript
+const HEX_SIZE = 0.65; // degrees
+const H = HEX_SIZE * Math.sqrt(3);
+
+function hexBin(lng, lat) {
+  const col = Math.round(lng / (HEX_SIZE * 1.5));
+  const row = Math.round((lat - (col % 2) * H / 2) / H);
+  return { col, row };
+}
+```
+
+This gives you an offset-coordinate hex grid. The `col % 2` offset creates the interlocking honeycomb pattern.
+
+For each bin, generate a hexagonal polygon:
+
+```javascript
+function hexPolygon(cx, cy, size) {
+  return Array.from({length: 6}, (_, i) => {
+    const angle = Math.PI / 180 * (60 * i + 30);
+    return [cx + size * Math.cos(angle),
+            cy + size * Math.sin(angle)];
+  });
+}
+```
+
+---
+
+## 2. MapLibre 3D Extrusions
+
+MapLibre GL JS has a powerful `fill-extrusion` layer type that renders polygons as 3D columns. The magic is in the paint properties:
+
+```javascript
+map.addLayer({
+  id: 'hexbins',
+  type: 'fill-extrusion',
+  source: 'hex-data',
+  paint: {
+    'fill-extrusion-color': [
+      'interpolate', ['linear'], ['get', 'value'],
+      0, '#003f5c',     // navy (low)
+      50, '#a05195',    // purple (mid)
+      100, '#ffa600'    // amber (high)
+    ],
+    'fill-extrusion-height': [
+      'coalesce',
+      ['feature-state', 'h'],  // ← animated height
+      ['get', 'baseH']          // ← fallback
+    ],
+    'fill-extrusion-opacity': 0.72
+  }
+});
+```
+
+The key insight: **`feature-state`** lets you update visual properties per-feature per-frame without resending the entire GeoJSON. This is what makes 60fps animation possible.
+
+---
+
+## 3. The Spring Physics Engine ⚡
+
+This is the heart of the interaction. Each hex column runs its own **damped harmonic oscillator**:
+
+```javascript
+const K = 0.32;     // stiffness
+const D = 0.58;     // damping
+const BOOST = 3.5;  // hover multiplier
+const RAD = 160;    // effect radius (px)
+
+// Per-hex state (TypedArrays for performance)
+const baseH = new Float64Array(N);
+const curH  = new Float64Array(N);
+const vel   = new Float64Array(N);
+
+function tick() {
+  for (let i = 0; i < N; i++) {
+    // Project hex center to screen coordinates
+    const pt = map.project([hexLng[i], hexLat[i]]);
+    const dist = Math.hypot(mouseX - pt.x, mouseY - pt.y);
+
+    // Target height: base + proximity boost
+    let target = baseH[i];
+    if (dist < RAD) {
+      const prox = 1 - dist / RAD;
+      target += baseH[i] * BOOST * prox * prox;
+    }
+
+    // Spring dynamics
+    vel[i] = (vel[i] + K * (target - curH[i])) * D;
+    curH[i] += vel[i];
+
+    // Push to MapLibre
+    map.setFeatureState(
+      { source: 'hex-data', id: i },
+      { h: curH[i] }
+    );
+  }
+  requestAnimationFrame(tick);
+}
+```
+
+**Why springs?** A simple lerp (`curH += 0.1 * (target - curH)`) gets you smooth animation but no personality. Springs give you **overshoot and oscillation** — columns bounce past their target and settle back. That's what makes it feel physical.
+
+**Tuning guide:**
+
+- Higher `K` → snappier response
+- Lower `D` → bouncier (more oscillation)
+- `K=0.32, D=0.58` → crisp with a subtle bounce
+- `K=0.06, D=0.90` → mushy/floaty (underwater feel)
+
+---
+
+## 4. The Wave Intro 🌊
+
+Instead of all columns appearing at once, they cascade west→east:
+
+```javascript
+const WAVE_MS = 3500; // total sweep duration
+const minLng = Math.min(...hexLngs);
+const maxLng = Math.max(...hexLngs);
+const t0 = performance.now();
+
+// Per-hex delay based on longitude
+const delay = hexLngs.map(lng =>
+  ((lng - minLng) / (maxLng - minLng)) * WAVE_MS
+);
+
+// In the animation loop:
+const elapsed = performance.now() - t0;
+if (elapsed < delay[i]) continue; // hex not yet activated
+```
+
+The spring physics handles the rest — when a hex "activates," its current height is 0 and its target is `baseH`. The spring naturally animates it upward with a satisfying bounce.
+
+**Variations:**
+
+- **Center-outward ripple:** use distance from map center instead of longitude
+- **Random pop:** assign random delays for a popcorn effect
+- **Data-driven:** highest values pop up first
+
+---
+
+## 5. Performance Tips
+
+Running spring physics for hundreds of features at 60fps requires care:
+
+1. **TypedArrays** — `Float64Array` instead of regular arrays. The JIT optimizes typed array access into near-native speed.
+2. **`map.project()` is fast** — converting lng/lat to screen pixels every frame sounds expensive, but MapLibre's projection is heavily optimized. 600 hexes × 60fps = 36,000 projections/sec runs fine.
+3. **Conditional updates** — only call `setFeatureState` when the height actually changes:
+
+```javascript
+if (Math.abs(vel[i]) > 1 || Math.abs(curH[i] - target) > 1)
+  map.setFeatureState({source, id: i}, {h: curH[i]});
+```
+
+4. **Single source, multiple layers** — both your main layer and any glow/shadow layers can read from the same source + feature-state. One update animates everything.
+
+---
+
+## 6. Make It Your Own
+
+The entire visualization is a **single HTML file** — no build step, no npm, no framework. Fork it and swap in your own data:
+
+- 🏙️ **Building heights** from OpenStreetMap
+- 📊 **Census demographics** (income, education, population density)
+- 🌡️ **Climate data** (temperature anomalies, rainfall)
+- 🚗 **Traffic density** from GPS traces
+- 📱 **App usage metrics** by geography
+
+The spring animation pattern works with ANY MapLibre fill-extrusion source. The hex binning is just one option — you could use census tracts, zip codes, H3 cells, or custom polygons.
+
+---
+
+## Get the Code
+
+The full source is on GitHub: [github.com/YOUR_USERNAME/hexbin-spring-map](https://github.com/YOUR_USERNAME/hexbin-spring-map)
+
+One file. Zero dependencies. Just open `index.html`.
+
+---
+
+*What would you visualize with this? Drop your ideas in the comments — I'd love to see what people build with it.* 💬
+
+#DataVisualization #GIS #WebGL #MapLibre #JavaScript #OpenSource #DataScience #InteractiveDesign #FrontendDevelopment #CreativeCoding

@@ -1,0 +1,70 @@
+# 🎓 3D Hexbin Spring Map
+
+An interactive 3D hexagonal binning visualization built with **MapLibre GL JS** and custom **spring physics animation**. PhD concentration data (synthetic ACS Census-style) is aggregated into hexagonal bins and rendered as extruded 3D columns on a dark basemap.
+
+## ✨ Features
+
+- **3D Hexbin Columns** — height encodes data density with a sunset color ramp
+- **Spring Physics Hover** — columns near your cursor bounce up with realistic spring dynamics
+- **Wave Intro Animation** — columns pop up west-to-east like dominoes on page load
+- **Interactive Map** — pan, zoom, rotate, tilt with MapLibre GL JS
+- **CONUS Clipped** — hexagons clipped to US land boundaries
+- **Semi-transparent** — basemap visible through columns
+- **Zero Dependencies** — single self-contained HTML file
+
+## 🚀 Quick Start
+
+Download `index.html` and open it in any modern browser. That's it.
+
+Or enable GitHub Pages (Settings > Pages > main branch) for a live link.
+
+## 🎮 Controls
+
+| Action | Input |
+|--------|-------|
+| Pan | Left-drag |
+| Rotate/Tilt | Right-drag or Ctrl+drag |
+| Zoom | Scroll wheel |
+| Spring Hover | Move mouse over hexagons |
+
+## 🔧 Customization
+
+### Spring Physics
+```javascript
+const K = 0.32;     // Stiffness (higher = snappier)
+const D = 0.58;     // Damping (lower = bouncier)
+const BOOST = 3.5;  // Hover height multiplier
+const RAD = 160;    // Effect radius in pixels
+```
+
+### Wave Intro
+```javascript
+const WAVE_MS = 3500; // West-to-east sweep duration (ms)
+```
+
+### Your Own Data
+Replace the embedded GeoJSON with your own hex-binned data. Each feature needs:
+- A numeric value property (used for color + height)
+- Hexagonal polygon geometry
+- Sequential numeric `id` for feature-state animation
+
+## 📐 Architecture
+
+```
+MapLibre GL JS (WebGL basemap + 3D rendering)
+  └─ fill-extrusion layer (hex columns)
+      └─ feature-state (per-frame height updates)
+          └─ Spring physics engine (damped oscillator per hex)
+              └─ Mouse proximity detection (screen-space)
+```
+
+## 🛠 Tech Stack
+
+- MapLibre GL JS 4.7.1 — open-source WebGL maps
+- CartoDB Dark Matter — basemap tiles
+- Vanilla JavaScript — no frameworks, no build step
+- TypedArrays — Float64Array for 60fps performance
+
+## 📄 License
+
+MIT
