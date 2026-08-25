@@ -189,12 +189,9 @@ The spring animation pattern works with ANY MapLibre fill-extrusion source. The 
 
 ## Get the Code
 
-The full source is on GitHub: [github.com/YOUR_USERNAME/hexbin-spring-map](https://github.com/YOUR_USERNAME/hexbin-spring-map)
+The full source is on GitHub: [github.com/Ptander01/hexbin-spring-map](https://github.com/Ptander01/hexbin-spring-map)
 
 One file. Zero dependencies. Just open `index.html`.
 
 ---
 
-*What would you visualize with this? Drop your ideas in the comments — I'd love to see what people build with it.* 💬
-
-#DataVisualization #GIS #WebGL #MapLibre #JavaScript #OpenSource #DataScience #InteractiveDesign #FrontendDevelopment #CreativeCoding
